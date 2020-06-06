@@ -27,8 +27,13 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
-import android.support.v13.app.FragmentPagerAdapter;
-import android.support.v4.view.ViewPager;
+
+import androidx.annotation.NonNull;
+import androidx.legacy.app.FragmentPagerAdapter;
+import androidx.legacy.app.FragmentStatePagerAdapter;
+import androidx.viewpager.widget.PagerAdapter;
+import androidx.viewpager.widget.ViewPager;
+
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -67,12 +72,12 @@ public class RecipeActivity extends Activity {
     private static final String TAG = RecipeActivity.class.getName();
 
     /**
-     * The {@link android.support.v4.view.PagerAdapter} that will provide
+     * The {@link PagerAdapter} that will provide
      * fragments for each of the sections. We use a
      * {@link FragmentPagerAdapter} derivative, which will keep every
      * loaded fragment in memory. If this becomes too memory intensive, it
      * may be best to switch to a
-     * {@link android.support.v13.app.FragmentStatePagerAdapter}.
+     * {@link FragmentStatePagerAdapter}.
      */
     private SectionsPagerAdapter mSectionsPagerAdapter;
 
@@ -94,10 +99,17 @@ public class RecipeActivity extends Activity {
     @Override
     public void onStart() {
         super.onStart();
+        if (mRecipe != null) {
+            indexRecipe();
+            FirebaseUserActions.getInstance().start(getRecipeViewAction());
+        }
     }
 
     @Override
     public void onStop() {
+        if (mRecipe != null) {
+            FirebaseUserActions.getInstance().end(getRecipeViewAction());
+        }
         super.onStop();
     }
 
@@ -222,7 +234,7 @@ public class RecipeActivity extends Activity {
         addNoteDialog.setPositiveButton(positiveText, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int whichButton) {
                 // TODO(developer): Uncomment this when getNoteCommentAction is available
-                // FirebaseUserActions.getInstance().end(getNoteCommentAction());
+                FirebaseUserActions.getInstance().end(getNoteCommentAction());
 
                 String noteText = edittext.getText().toString().trim();
                 ContentValues values = new ContentValues();
@@ -241,14 +253,14 @@ public class RecipeActivity extends Activity {
                 mRecipe.setNote(note);
                 ((ToggleButton) findViewById(R.id.addNoteToggle)).setChecked(true);
                 // TODO(developer): Remember to uncomment this when indexNote is available
-                // indexNote();
+                indexNote();
             }
         });
 
         addNoteDialog.setNegativeButton(negativeText, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int whichButton) {
                 // TODO(developer): Uncomment this when getNoteCommentAction is available
-                // FirebaseUserActions.getInstance().end(getNoteCommentAction());
+                 FirebaseUserActions.getInstance().end(getNoteCommentAction());
 
                 if (getString(R.string.dialog_delete_note).equalsIgnoreCase(negativeText)) {
                     Uri noteUri = RecipeContentProvider.CONTENT_URI.buildUpon().appendPath("notes")
@@ -267,6 +279,8 @@ public class RecipeActivity extends Activity {
             }
         });
         addNoteDialog.show();
+        FirebaseUserActions.getInstance().start(getNoteCommentAction());
+
     }
 
     /**
@@ -319,21 +333,21 @@ public class RecipeActivity extends Activity {
                 }
             }
 
-            Picasso.with(rootView.getContext())
-                    .load(photoUrl)
-                    .into(recipeImage, new Callback.EmptyCallback() {
-                        @Override
-                        public void onSuccess() {
-                            progressBar.setVisibility(View.GONE);
-                            Log.d("Picasso", "Image loaded successfully");
-                        }
-
-                        @Override
-                        public void onError() {
-                            progressBar.setVisibility(View.GONE);
-                            Log.d("Picasso", "Failed to load image");
-                        }
-                    });
+//            Picasso.with(rootView.getContext())
+//                    .load(photoUrl)
+//                    .into(recipeImage, new Callback.EmptyCallback() {
+//                        @Override
+//                        public void onSuccess() {
+//                            progressBar.setVisibility(View.GONE);
+//                            Log.d("Picasso", "Image loaded successfully");
+//                        }
+//
+//                        @Override
+//                        public void onError() {
+//                            progressBar.setVisibility(View.GONE);
+//                            Log.d("Picasso", "Failed to load image");
+//                        }
+//                    });
 
             FragmentTransaction transaction = getChildFragmentManager().beginTransaction();
 
@@ -479,4 +493,50 @@ public class RecipeActivity extends Activity {
         }
     }
 
+    private void indexNote() {
+        Note note = mRecipe.getNote();
+        Indexable noteToIndex = Indexables.noteDigitalDocumentBuilder()
+                .setName(mRecipe.getTitle() + " Note")
+                .setText(note.getText())
+                .setUrl(mRecipe.getNoteUrl())
+                .build();
+
+        Task<Void> task = FirebaseAppIndex.getInstance().update(noteToIndex);
+        task.addOnSuccessListener(new OnSuccessListener<Void>() {
+            @Override
+            public void onSuccess(Void aVoid) {
+                Log.d(TAG, "App Indexing API: Successfully added note to index");
+            }
+        });
+
+        task.addOnFailureListener(new OnFailureListener() {
+            @Override
+            public void onFailure(@NonNull Exception exception) {
+                Log.e(TAG, "App Indexing API: Failed to add note to index. " + exception
+                        .getMessage());
+            }
+        });
+    }
+
+    private void indexRecipe() {
+        Indexable recipeToIndex = new Indexable.Builder()
+                .setName(mRecipe.getTitle())
+                .setUrl(mRecipe.getRecipeUrl())
+                .setImage(mRecipe.getPhoto())
+                .setDescription(mRecipe.getDescription())
+                .build();
+
+        FirebaseAppIndex.getInstance().update(recipeToIndex);
+    }
+
+    private Action getRecipeViewAction() {
+        return Actions.newView(mRecipe.getTitle(), mRecipe.getRecipeUrl());
+    }
+
+    private Action getNoteCommentAction() {
+        return new Action.Builder(Action.Builder.COMMENT_ACTION)
+                .setObject(mRecipe.getTitle() + " Note", mRecipe.getNoteUrl())
+                .setMetadata(new Action.Metadata.Builder().setUpload(false))
+                .build();
+    }
 }

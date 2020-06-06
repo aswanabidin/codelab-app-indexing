@@ -27,7 +27,26 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:theme="@android:style/Theme.Holo.NoActionBar">
+
+            <intent-filter android:label="@string/app_name" android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <!-- Accepts URIs that begin with "http://recipe-app.com/recipe" -->
+                <data android:scheme="http"
+                    android:host="recipe-app.com"
+                    android:pathPrefix="/recipe" />
+            </intent-filter>
+
         </activity>
+
+        <service android:name=".client.AppIndexingService"
+            android:exported="true"
+            android:permission="com.google.android.gms.permission.APPINDEXING">
+            <intent-filter>
+                <action android:name="com.google.firebase.appindexing.UPDATE_INDEX" />
+            </intent-filter>
+        </service>
 
         <provider
             android:name=".client.content_provider.RecipeContentProvider"
